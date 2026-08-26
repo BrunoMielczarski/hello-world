@@ -9,6 +9,9 @@ const emptyState = () => ({
 });
 
 let state = load();
+const remote = { enabled: false, rev: 0, pushing: false, dirty: false };
+
+export const isRemote = () => remote.enabled;
 
 function load() {
   try {
@@ -22,7 +25,79 @@ function load() {
 }
 
 function persist() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (err) {
+    console.error("Falha ao gravar dados locais", err);
+  }
+  if (remote.enabled) push();
+}
+
+async function push() {
+  if (remote.pushing) {
+    remote.dirty = true;
+    return;
+  }
+  remote.pushing = true;
+  remote.dirty = false;
+  try {
+    const res = await fetch("api/state", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rev: remote.rev, state }),
+    });
+    if (res.ok) remote.rev = (await res.json()).rev;
+  } catch (err) {
+    console.error("Falha ao gravar no servidor", err);
+  } finally {
+    remote.pushing = false;
+    if (remote.dirty) push();
+  }
+}
+
+/**
+ * Conecta ao servidor compartilhado (quando o app é servido por ele).
+ * Sem servidor, o app continua funcionando apenas com o navegador local.
+ */
+export async function initStore() {
+  if (!/^https?:$/.test(location.protocol)) return false;
+  try {
+    const res = await fetch("api/state", { cache: "no-store" });
+    if (!res.ok) return false;
+    const data = await res.json();
+    remote.enabled = true;
+    remote.rev = Number(data.rev) || 0;
+    const serverEmpty = !data.state || !(data.state.materials || []).length;
+    if (serverEmpty && state.materials.length) {
+      push();
+    } else {
+      state = { ...emptyState(), ...(data.state || {}) };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+/** Busca alterações feitas por outros computadores e avisa quando houver. */
+export function watchRemote(onChange, interval = 6000) {
+  if (!remote.enabled) return;
+  setInterval(async () => {
+    if (remote.pushing) return;
+    try {
+      const res = await fetch("api/state", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Number(data.rev) === remote.rev) return;
+      remote.rev = Number(data.rev) || 0;
+      state = { ...emptyState(), ...(data.state || {}) };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      onChange();
+    } catch (err) {
+      /* servidor momentaneamente indisponível */
+    }
+  }, interval);
 }
 
 const uid = (prefix) => `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
@@ -63,6 +138,7 @@ export function saveMaterial(data) {
     state.entries.push({
       id: uid("ent"),
       materialId: material.id,
+      type: "entrada",
       qty: stock,
       document: "Estoque inicial",
       supplier: payload.supplier,
@@ -131,16 +207,24 @@ export function deleteStructure(id) {
 export const listEntries = () =>
   [...state.entries].sort((a, b) => b.date.localeCompare(a.date));
 
-export function addEntry({ materialId, qty, document: doc, supplier, note }) {
+export function addEntry({ materialId, qty, type, document: doc, supplier, note }) {
   const material = getMaterial(materialId);
   if (!material) throw new Error("Selecione um material cadastrado.");
   const quantity = Number(qty);
   if (!(quantity > 0)) throw new Error("A quantidade deve ser maior que zero.");
+  const movement = type === "saida" ? "saida" : "entrada";
+  const signed = movement === "saida" ? -quantity : quantity;
+  if (movement === "saida" && quantity > material.stock) {
+    throw new Error(
+      `Não é possível remover ${quantity}: o estoque atual de ${material.code} é ${material.stock}.`
+    );
+  }
 
-  material.stock = Number((material.stock + quantity).toFixed(4));
+  material.stock = Number((material.stock + signed).toFixed(4));
   const entry = {
     id: uid("ent"),
     materialId,
+    type: movement,
     qty: quantity,
     document: (doc || "").trim(),
     supplier: (supplier || material.supplier || "").trim(),
