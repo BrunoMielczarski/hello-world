@@ -49,14 +49,11 @@ body {
 
 .login-logo { width: 210px; max-width: 80%; }
 .login-robot {
-  width: 96px;
-  height: 96px;
-  object-fit: cover;
-  object-position: 50% 62%;
-  border-radius: 50%;
-  border: 4px solid var(--orange-soft);
-  margin: 8px auto 4px;
+  width: 118px;
+  height: auto;
+  margin: 14px auto 6px;
   display: block;
+  filter: drop-shadow(0 8px 14px rgba(16, 40, 90, .18));
 }
 .login-card h1 { font-size: 1.15rem; margin: 12px 0 2px; color: var(--navy); }
 .login-sub { margin: 0 0 20px; color: var(--muted); font-size: .86rem; }
@@ -144,10 +141,7 @@ input:focus, select:focus, textarea:focus {
 }
 .sidebar-foot small { display: block; color: #b9c4da; font-size: .72rem; }
 .sidebar-foot .btn { grid-column: 1 / -1; color: #fff; border-color: rgba(255,255,255,.3); }
-.robot-badge {
-  width: 38px; height: 38px; border-radius: 50%;
-  object-fit: cover; object-position: 50% 62%;
-}
+.robot-badge { width: 38px; height: auto; }
 
 .content { padding: 24px 28px 40px; }
 .topbar {

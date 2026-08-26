@@ -27,15 +27,29 @@ O administrador tem acesso a todas as funções.
   custo estimado e exportação em CSV). Ao produzir a ordem, o estoque é baixado e o total de robôs
   montados no dashboard é atualizado.
 
-## Como rodar localmente
+## Como rodar no seu computador (Windows)
 
-```bash
-python3 -m http.server 8000
-# abra http://localhost:8000
-```
+1. Baixe o projeto: na página do repositório no GitHub, clique em **Code → Download ZIP** e extraia
+   a pasta (ex.: em `C:\protus`).
+2. Instale o Python (uma vez só): https://www.python.org/downloads/ — na instalação, marque
+   **Add Python to PATH**.
+3. Abra a pasta extraída, clique na barra de endereço do Explorer, digite `cmd` e pressione Enter.
+4. Rode o servidor local:
 
-Os módulos JavaScript usam `type="module"`, portanto é necessário servir os arquivos por HTTP
-(abrir o `index.html` direto do disco não funciona).
+   ```bash
+   python -m http.server 8000
+   ```
+
+5. Abra no navegador: http://localhost:8000 e entre com **Protus / Protus@4040**.
+
+Para parar, feche a janela do `cmd`. No Linux/macOS o comando é `python3 -m http.server 8000`.
+
+Os módulos JavaScript usam `type="module"`, portanto é necessário servir os arquivos por HTTP —
+abrir o `index.html` com duplo clique (`file://`) **não** funciona.
+
+Alternativa sem instalar nada: após o merge, ative **Settings → Pages → Branch: master** no
+repositório; o sistema fica disponível em `https://brunomielczarski.github.io/hello-world/`.
+Os dados ficam salvos no navegador de cada máquina (`localStorage`).
 
 Use o botão **Carregar dados de exemplo** no topo da tela para popular materiais, estruturas
 (Cabeça/Corpo/Base) e ordens de demonstração.
@@ -45,7 +59,7 @@ Use o botão **Carregar dados de exemplo** no topo da tela para popular materiai
 ```
 index.html
 assets/css/styles.css      paleta laranja/azul-marinho da marca
-assets/img/                logo AI Protus e rosto do robô
+assets/img/                logo AI Protus e rosto do robô (PNG recortado, fundo transparente)
 assets/js/store.js         modelo de dados, cálculo de B.O.M. e persistência
 assets/js/ui.js            formatação, toasts e tags de status
 assets/js/views/           dashboard, materiais, estruturas, entradas e ordens
