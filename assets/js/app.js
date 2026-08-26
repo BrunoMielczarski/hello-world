@@ -1,4 +1,4 @@
-import { seedDemoData } from "./store.js";
+import { initStore, isRemote, seedDemoData, watchRemote } from "./store.js";
 import { toast } from "./ui.js";
 import * as dashboard from "./views/dashboard.js";
 import * as materials from "./views/materials.js";
@@ -75,6 +75,25 @@ el("seed-demo").addEventListener("click", () => {
   selectView("dashboard");
 });
 
-const session = sessionStorage.getItem(SESSION_KEY);
-if (session) showApp(session);
-else showLogin();
+function showStorageMode() {
+  const label = el("storage-mode");
+  if (!label) return;
+  label.textContent = isRemote()
+    ? "Servidor compartilhado"
+    : "Dados apenas neste navegador";
+  label.classList.toggle("tag-ok", isRemote());
+  label.classList.toggle("tag-warn", !isRemote());
+}
+
+async function bootstrap() {
+  await initStore();
+  showStorageMode();
+  watchRemote(() => {
+    if (!el("app").classList.contains("hidden")) renderView();
+  });
+  const session = sessionStorage.getItem(SESSION_KEY);
+  if (session) showApp(session);
+  else showLogin();
+}
+
+bootstrap();
