@@ -1,5 +1,5 @@
 import { addEntry, getMaterial, listEntries, listMaterials } from "../store.js";
-import { datetime, escapeHtml, formValues, num, stockTag, toast } from "../ui.js";
+import { datetime, escapeHtml, formValues, num, reportError, stockTag, toast } from "../ui.js";
 
 export const title = "Entrada de Materiais";
 export const subtitle = "Registre compras posteriores e reponha o estoque de qualquer material";
@@ -116,7 +116,12 @@ export function render(container, rerender) {
 
   container.querySelectorAll("[data-select]").forEach((btn) =>
     btn.addEventListener("click", () => {
-      selectedId = btn.dataset.select;
+      const material = getMaterial(btn.dataset.select);
+      if (!material) {
+        reportError(new Error("Material não encontrado."));
+        return;
+      }
+      selectedId = material.id;
       render(container, rerender);
       window.scrollTo({ top: 0, behavior: "smooth" });
     })
@@ -129,8 +134,8 @@ export function render(container, rerender) {
       addEntry({ materialId: selectedId, ...formValues(form) });
       toast("Estoque atualizado com a entrada.");
       render(container, rerender);
-    } catch (err) {
-      toast(err.message, "error");
+    } catch (error) {
+      reportError(error, "Não foi possível registrar a entrada.");
     }
   });
   form?.querySelector("[data-clear]")?.addEventListener("click", () => {

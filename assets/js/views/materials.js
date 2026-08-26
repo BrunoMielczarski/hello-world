@@ -1,5 +1,5 @@
 import { listMaterials, saveMaterial, deleteMaterial, getMaterial } from "../store.js";
-import { escapeHtml, formValues, money, num, stockTag, toast } from "../ui.js";
+import { escapeHtml, formValues, money, num, reportError, stockTag, toast } from "../ui.js";
 
 export const title = "Cadastro de Materiais";
 export const subtitle = "Itens que compõem as estruturas do robô, com estoque inicial";
@@ -105,8 +105,8 @@ export function render(container, rerender, search = "") {
       toast(editingId ? "Material atualizado." : "Material cadastrado com estoque inicial.");
       editingId = null;
       rerender();
-    } catch (err) {
-      toast(err.message, "error");
+    } catch (error) {
+      reportError(error, "Não foi possível salvar o material.");
     }
   });
 
@@ -117,7 +117,12 @@ export function render(container, rerender, search = "") {
 
   container.querySelectorAll("[data-edit]").forEach((btn) =>
     btn.addEventListener("click", () => {
-      editingId = btn.dataset.edit;
+      const material = getMaterial(btn.dataset.edit);
+      if (!material) {
+        reportError(new Error("Material não encontrado."));
+        return;
+      }
+      editingId = material.id;
       rerender();
       window.scrollTo({ top: 0, behavior: "smooth" });
     })
@@ -126,14 +131,18 @@ export function render(container, rerender, search = "") {
   container.querySelectorAll("[data-delete]").forEach((btn) =>
     btn.addEventListener("click", () => {
       const material = getMaterial(btn.dataset.delete);
-      if (!material || !confirm(`Excluir o material ${material.code} - ${material.name}?`)) return;
+      if (!material) {
+        reportError(new Error("Material não encontrado."));
+        return;
+      }
+      if (!confirm(`Excluir o material ${material.code} - ${material.name}?`)) return;
       try {
         deleteMaterial(material.id);
         toast("Material excluído.");
         if (editingId === material.id) editingId = null;
         rerender();
-      } catch (err) {
-        toast(err.message, "error");
+      } catch (error) {
+        reportError(error, "Não foi possível excluir o material.");
       }
     })
   );

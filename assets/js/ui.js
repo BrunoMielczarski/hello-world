@@ -26,6 +26,15 @@ export function toast(message, type = "info") {
   toastTimer = setTimeout(() => el.classList.add("hidden"), 3600);
 }
 
+export function errorMessage(error, fallback = "Ocorreu um erro inesperado.") {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+export function reportError(error, fallback) {
+  console.error(error);
+  toast(errorMessage(error, fallback), "error");
+}
+
 export function statusTag(status) {
   const map = {
     aberta: ["tag-warn", "Aberta"],

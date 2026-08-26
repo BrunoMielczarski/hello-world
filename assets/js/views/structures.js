@@ -1,5 +1,5 @@
 import { listMaterials, listStructures, saveStructure, deleteStructure, getStructure, getMaterial } from "../store.js";
-import { escapeHtml, money, num, toast } from "../ui.js";
+import { escapeHtml, money, num, reportError, toast } from "../ui.js";
 
 export const title = "Cadastro de Estrutura";
 export const subtitle = "Monte conjuntos como Cabeça, Corpo e Base com os materiais cadastrados";
@@ -182,8 +182,8 @@ export function render(container, rerender) {
       editingId = null;
       draftItems = [];
       rerender();
-    } catch (err) {
-      toast(err.message, "error");
+    } catch (error) {
+      reportError(error, "Não foi possível salvar a estrutura.");
     }
   });
 
@@ -196,7 +196,10 @@ export function render(container, rerender) {
   container.querySelectorAll("[data-edit]").forEach((btn) =>
     btn.addEventListener("click", () => {
       const structure = getStructure(btn.dataset.edit);
-      if (!structure) return;
+      if (!structure) {
+        reportError(new Error("Estrutura não encontrada."));
+        return;
+      }
       editingId = structure.id;
       draftItems = structure.items.map((item) => ({ ...item }));
       rerender();
@@ -207,7 +210,11 @@ export function render(container, rerender) {
   container.querySelectorAll("[data-delete]").forEach((btn) =>
     btn.addEventListener("click", () => {
       const structure = getStructure(btn.dataset.delete);
-      if (!structure || !confirm(`Excluir a estrutura ${structure.name}?`)) return;
+      if (!structure) {
+        reportError(new Error("Estrutura não encontrada."));
+        return;
+      }
+      if (!confirm(`Excluir a estrutura ${structure.name}?`)) return;
       try {
         deleteStructure(structure.id);
         if (editingId === structure.id) {
@@ -216,8 +223,8 @@ export function render(container, rerender) {
         }
         toast("Estrutura excluída.");
         rerender();
-      } catch (err) {
-        toast(err.message, "error");
+      } catch (error) {
+        reportError(error, "Não foi possível excluir a estrutura.");
       }
     })
   );
