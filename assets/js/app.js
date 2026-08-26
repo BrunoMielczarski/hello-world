@@ -1,5 +1,5 @@
-import { seedDemoData } from "./store.js";
-import { toast } from "./ui.js";
+import { initializeStore, seedDemoData } from "./store.js";
+import { errorMessage, reportError, toast } from "./ui.js";
 import * as dashboard from "./views/dashboard.js";
 import * as materials from "./views/materials.js";
 import * as structures from "./views/structures.js";
@@ -16,10 +16,23 @@ const el = (id) => document.getElementById(id);
 
 function renderView() {
   const view = views[currentView];
-  el("view-title").textContent = view.title;
-  el("view-sub").textContent = view.subtitle;
-  el("views").innerHTML = "";
-  view.render(el("views"), renderView);
+  const container = el("views");
+
+  try {
+    if (!view) throw new Error(`Tela não encontrada: ${currentView}.`);
+    el("view-title").textContent = view.title;
+    el("view-sub").textContent = view.subtitle;
+    container.innerHTML = "";
+    view.render(container, renderView);
+  } catch (error) {
+    container.innerHTML =
+      '<section class="card"><h3>Não foi possível carregar esta tela</h3><p class="empty"></p></section>';
+    container.querySelector("p").textContent = errorMessage(
+      error,
+      "Atualize a página e tente novamente.",
+    );
+    reportError(error, "Não foi possível carregar esta tela.");
+  }
 }
 
 function selectView(name) {
@@ -44,9 +57,10 @@ function showLogin() {
   el("app").classList.add("hidden");
   el("login-screen").classList.remove("hidden");
   el("login-form").reset();
+  el("login-error").classList.add("hidden");
 }
 
-el("login-form").addEventListener("submit", (event) => {
+function handleLogin(event) {
   event.preventDefault();
   const user = el("login-user").value.trim();
   const password = el("login-pass").value;
@@ -54,27 +68,68 @@ el("login-form").addEventListener("submit", (event) => {
     el("login-error").classList.remove("hidden");
     return;
   }
-  el("login-error").classList.add("hidden");
-  sessionStorage.setItem(SESSION_KEY, CREDENTIALS.user);
-  showApp(CREDENTIALS.user);
-});
+  try {
+    el("login-error").classList.add("hidden");
+    sessionStorage.setItem(SESSION_KEY, CREDENTIALS.user);
+    showApp(CREDENTIALS.user);
+  } catch (error) {
+    reportError(new Error("Não foi possível iniciar a sessão no navegador.", { cause: error }));
+  }
+}
 
-el("logout").addEventListener("click", () => {
-  sessionStorage.removeItem(SESSION_KEY);
-  showLogin();
-});
+function handleLogout() {
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+    showLogin();
+  } catch (error) {
+    reportError(new Error("Não foi possível encerrar a sessão no navegador.", { cause: error }));
+  }
+}
 
-document.querySelectorAll(".nav-item").forEach((btn) =>
-  btn.addEventListener("click", () => selectView(btn.dataset.view))
-);
+function initializeApp() {
+  el("login-form").addEventListener("submit", handleLogin);
+  el("logout").addEventListener("click", handleLogout);
 
-el("seed-demo").addEventListener("click", () => {
-  if (!confirm("Substituir os dados atuais por um conjunto de exemplo?")) return;
-  seedDemoData();
-  toast("Dados de exemplo carregados.");
-  selectView("dashboard");
-});
+  document.querySelectorAll(".nav-item").forEach((btn) =>
+    btn.addEventListener("click", () => selectView(btn.dataset.view))
+  );
 
-const session = sessionStorage.getItem(SESSION_KEY);
-if (session) showApp(session);
-else showLogin();
+  el("seed-demo").addEventListener("click", () => {
+    if (!confirm("Substituir os dados atuais por um conjunto de exemplo?")) return;
+    try {
+      seedDemoData();
+      toast("Dados de exemplo carregados.");
+      selectView("dashboard");
+    } catch (error) {
+      reportError(error, "Não foi possível carregar os dados de exemplo.");
+    }
+  });
+
+  let session;
+  try {
+    session = sessionStorage.getItem(SESSION_KEY);
+  } catch (error) {
+    throw new Error("Não foi possível acessar a sessão salva no navegador.", { cause: error });
+  }
+  if (session) showApp(session);
+  else showLogin();
+}
+
+function reportStartupError(error) {
+  console.error(error);
+  el("app").classList.add("hidden");
+  el("login-screen").classList.remove("hidden");
+  const message = el("login-error");
+  message.textContent = errorMessage(error, "Não foi possível iniciar a aplicação.");
+  message.classList.remove("hidden");
+  Array.from(el("login-form").elements).forEach((element) => {
+    element.disabled = true;
+  });
+}
+
+try {
+  initializeStore();
+  initializeApp();
+} catch (error) {
+  reportStartupError(error);
+}

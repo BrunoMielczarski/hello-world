@@ -8,7 +8,7 @@ import {
   listStructures,
   produceOrder,
 } from "../store.js";
-import { datetime, escapeHtml, money, num, statusTag, toast } from "../ui.js";
+import { datetime, escapeHtml, money, num, reportError, statusTag, toast } from "../ui.js";
 
 export const title = "Ordem de Produção";
 export const subtitle = "Consulta a estrutura, confere o estoque item a item e gera a B.O.M.";
@@ -66,12 +66,19 @@ function bomCsv(lines) {
 }
 
 function downloadCsv(filename, content) {
-  const blob = new Blob([`\ufeff${content}`], { type: "text/csv;charset=utf-8" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(link.href);
+  let objectUrl;
+  try {
+    const blob = new Blob([`\ufeff${content}`], { type: "text/csv;charset=utf-8" });
+    const link = document.createElement("a");
+    objectUrl = URL.createObjectURL(blob);
+    link.href = objectUrl;
+    link.download = filename;
+    link.click();
+  } catch (error) {
+    throw new Error(`Não foi possível exportar ${filename}.`, { cause: error });
+  } finally {
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+  }
 }
 
 function plannerCard() {
@@ -142,8 +149,7 @@ function ordersCard() {
     .map((order) => {
       const bom = order.status === "aberta" ? calculateBom(order.structureIds, order.quantity) : { lines: order.bom, shortageCount: order.bom.filter((l) => l.toBuy > 0).length, complete: order.bom.every((l) => l.toBuy === 0) };
       const structureNames = order.structureIds
-        .map((id) => getStructure(id)?.name)
-        .filter(Boolean)
+        .map((id) => getStructure(id)?.name ?? "Estrutura removida")
         .join(", ");
       const detail =
         expandedOrderId === order.id
@@ -209,12 +215,16 @@ export function render(container, rerender) {
     quantity = Number(qtyInput.value) || 0;
     if (!selectedStructures.length) return toast("Selecione ao menos uma estrutura.", "error");
     if (!(quantity > 0)) return toast("Informe a quantidade de robôs.", "error");
-    simulation = calculateBom(selectedStructures, quantity);
-    const product = productInput.value;
-    const notes = notesInput.value;
-    render(container, rerender);
-    container.querySelector("#order-product").value = product;
-    container.querySelector("#order-notes").value = notes;
+    try {
+      simulation = calculateBom(selectedStructures, quantity);
+      const product = productInput.value;
+      const notes = notesInput.value;
+      render(container, rerender);
+      container.querySelector("#order-product").value = product;
+      container.querySelector("#order-notes").value = notes;
+    } catch (error) {
+      reportError(error, "Não foi possível calcular a B.O.M.");
+    }
   });
 
   container.querySelector("#create-order")?.addEventListener("click", () => {
@@ -230,13 +240,18 @@ export function render(container, rerender) {
       selectedStructures = [];
       quantity = 1;
       rerender();
-    } catch (err) {
-      toast(err.message, "error");
+    } catch (error) {
+      reportError(error, "Não foi possível criar a ordem.");
     }
   });
 
   container.querySelector("#export-bom")?.addEventListener("click", () => {
-    if (simulation) downloadCsv("bom-simulacao.csv", bomCsv(simulation.lines));
+    try {
+      if (!simulation) throw new Error("Gere a B.O.M. antes de exportar.");
+      downloadCsv("bom-simulacao.csv", bomCsv(simulation.lines));
+    } catch (error) {
+      reportError(error, "Não foi possível exportar a B.O.M.");
+    }
   });
 
   container.querySelectorAll("[data-toggle]").forEach((btn) =>
@@ -248,10 +263,14 @@ export function render(container, rerender) {
 
   container.querySelectorAll("[data-export]").forEach((btn) =>
     btn.addEventListener("click", () => {
-      const order = getOrder(btn.dataset.export);
-      if (!order) return;
-      const lines = order.status === "aberta" ? calculateBom(order.structureIds, order.quantity).lines : order.bom;
-      downloadCsv(`bom-${order.number}.csv`, bomCsv(lines));
+      try {
+        const order = getOrder(btn.dataset.export);
+        if (!order) throw new Error("Ordem não encontrada.");
+        const lines = order.status === "aberta" ? calculateBom(order.structureIds, order.quantity).lines : order.bom;
+        downloadCsv(`bom-${order.number}.csv`, bomCsv(lines));
+      } catch (error) {
+        reportError(error, "Não foi possível exportar a B.O.M.");
+      }
     })
   );
 
@@ -261,8 +280,8 @@ export function render(container, rerender) {
         const order = produceOrder(btn.dataset.produce);
         toast(`Ordem ${order.number} produzida. Estoque baixado.`);
         rerender();
-      } catch (err) {
-        toast(err.message, "error");
+      } catch (error) {
+        reportError(error, "Não foi possível produzir a ordem.");
       }
     })
   );
@@ -270,13 +289,17 @@ export function render(container, rerender) {
   container.querySelectorAll("[data-cancel]").forEach((btn) =>
     btn.addEventListener("click", () => {
       const order = getOrder(btn.dataset.cancel);
-      if (!order || !confirm(`Cancelar a ordem ${order.number}?`)) return;
+      if (!order) {
+        reportError(new Error("Ordem não encontrada."));
+        return;
+      }
+      if (!confirm(`Cancelar a ordem ${order.number}?`)) return;
       try {
         cancelOrder(order.id);
         toast("Ordem cancelada.");
         rerender();
-      } catch (err) {
-        toast(err.message, "error");
+      } catch (error) {
+        reportError(error, "Não foi possível cancelar a ordem.");
       }
     })
   );

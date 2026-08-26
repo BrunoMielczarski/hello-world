@@ -37,7 +37,7 @@ export function render(container) {
       (order) => `
       <tr>
         <td><strong>${escapeHtml(order.number)}</strong></td>
-        <td>${escapeHtml(order.structureIds.map((id) => getStructure(id)?.name).filter(Boolean).join(", "))}</td>
+        <td>${escapeHtml(order.structureIds.map((id) => getStructure(id)?.name ?? "Estrutura removida").join(", "))}</td>
         <td class="num">${num(order.quantity)}</td>
         <td>${statusTag(order.status)}</td>
         <td>${datetime(order.producedAt || order.createdAt)}</td>

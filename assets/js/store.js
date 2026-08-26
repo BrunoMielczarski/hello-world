@@ -8,21 +8,58 @@ const emptyState = () => ({
   sequences: { order: 0 },
 });
 
-let state = load();
+const clone = (value) => JSON.parse(JSON.stringify(value));
+
+let state;
+let persistedState;
+let persistencePaused = false;
 
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return emptyState();
-    return { ...emptyState(), ...JSON.parse(raw) };
-  } catch (err) {
-    console.error("Falha ao ler dados locais", err);
-    return emptyState();
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("O formato dos dados salvos é inválido.");
+    }
+    if (!["materials", "structures", "entries", "orders"].every((key) => Array.isArray(parsed[key]))) {
+      throw new Error("Os dados salvos estão incompletos.");
+    }
+    const orderSequence = Number(parsed.sequences?.order ?? 0);
+    if (!Number.isInteger(orderSequence) || orderSequence < 0) {
+      throw new Error("A sequência de ordens salva é inválida.");
+    }
+    return {
+      ...emptyState(),
+      ...parsed,
+      sequences: { order: orderSequence },
+    };
+  } catch (error) {
+    throw new Error(
+      "Não foi possível carregar os dados salvos. Eles não foram alterados; verifique o armazenamento do site e recarregue a página.",
+      { cause: error },
+    );
   }
 }
 
 function persist() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (persistencePaused) return;
+  try {
+    const serialized = JSON.stringify(state);
+    const snapshot = JSON.parse(serialized);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    persistedState = snapshot;
+  } catch (error) {
+    state = clone(persistedState);
+    throw new Error("Não foi possível salvar os dados no navegador. A alteração foi desfeita.", {
+      cause: error,
+    });
+  }
+}
+
+export function initializeStore() {
+  state = load();
+  persistedState = clone(state);
 }
 
 const uid = (prefix) => `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
@@ -75,6 +112,7 @@ export function saveMaterial(data) {
 }
 
 export function deleteMaterial(id) {
+  if (!getMaterial(id)) throw new Error("Material não encontrado.");
   const used = state.structures.filter((s) => s.items.some((i) => i.materialId === id));
   if (used.length) {
     throw new Error(`Material usado na(s) estrutura(s): ${used.map((s) => s.name).join(", ")}.`);
@@ -97,9 +135,17 @@ export function saveStructure(data) {
   );
   if (duplicated) throw new Error(`Já existe a estrutura ${name}.`);
 
-  const items = (data.items || [])
-    .filter((i) => i.materialId && Number(i.qty) > 0)
-    .map((i) => ({ materialId: i.materialId, qty: Number(i.qty) }));
+  if (!data.items?.length) throw new Error("Adicione ao menos um item à estrutura.");
+  const items = data.items.map((item) => {
+    const qty = Number(item.qty);
+    if (!item.materialId || !(qty > 0)) {
+      throw new Error("Todos os itens da estrutura precisam de material e quantidade válida.");
+    }
+    if (!getMaterial(item.materialId)) {
+      throw new Error(`Material não encontrado na estrutura: ${item.materialId}.`);
+    }
+    return { materialId: item.materialId, qty };
+  });
 
   if (data.id) {
     const structure = getStructure(data.id);
@@ -122,6 +168,7 @@ export function saveStructure(data) {
 }
 
 export function deleteStructure(id) {
+  if (!getStructure(id)) throw new Error("Estrutura não encontrada.");
   const open = state.orders.filter((o) => o.status === "aberta" && o.structureIds.includes(id));
   if (open.length) throw new Error("Estrutura vinculada a ordens de produção abertas.");
   state.structures = state.structures.filter((s) => s.id !== id);
@@ -162,12 +209,16 @@ export const getOrder = (id) => state.orders.find((o) => o.id === id) || null;
  */
 export function calculateBom(structureIds, quantity) {
   const qty = Number(quantity) || 0;
+  if (!(qty > 0)) throw new Error("Informe uma quantidade válida para calcular a B.O.M.");
   const required = new Map();
 
   structureIds.forEach((structureId) => {
     const structure = getStructure(structureId);
-    if (!structure) return;
+    if (!structure) throw new Error(`Estrutura não encontrada na B.O.M.: ${structureId}.`);
     structure.items.forEach((item) => {
+      if (!getMaterial(item.materialId)) {
+        throw new Error(`Material não encontrado na estrutura ${structure.name}: ${item.materialId}.`);
+      }
       const current = required.get(item.materialId) || { qty: 0, structures: new Set() };
       current.qty += item.qty * qty;
       current.structures.add(structure.name);
@@ -177,16 +228,17 @@ export function calculateBom(structureIds, quantity) {
 
   const lines = [...required.entries()].map(([materialId, info]) => {
     const material = getMaterial(materialId);
-    const stock = material ? material.stock : 0;
+    if (!material) throw new Error(`Material não encontrado na B.O.M.: ${materialId}.`);
+    const stock = material.stock;
     const fromStock = Math.min(stock, info.qty);
     const toBuy = Number(Math.max(0, info.qty - stock).toFixed(4));
     return {
       materialId,
-      code: material ? material.code : "—",
-      name: material ? material.name : "Material removido",
-      unit: material ? material.unit : "UN",
-      cost: material ? material.cost : 0,
-      supplier: material ? material.supplier : "",
+      code: material.code,
+      name: material.name,
+      unit: material.unit,
+      cost: material.cost,
+      supplier: material.supplier,
       structures: [...info.structures].join(", "),
       required: Number(info.qty.toFixed(4)),
       stock,
@@ -295,60 +347,70 @@ export function dashboardMetrics() {
 }
 
 export function seedDemoData() {
-  state = emptyState();
-  const demoMaterials = [
-    ["MT-001", "Display touch 21\" ", "UN", 6, 2, 1250],
-    ["MT-002", "Placa mãe mini-ITX", "UN", 4, 2, 980],
-    ["MT-003", "Câmera 4K USB", "UN", 3, 2, 420],
-    ["MT-004", "Alto-falante 10W", "UN", 10, 4, 85],
-    ["MT-005", "Estrutura ABS cabeça", "UN", 2, 2, 640],
-    ["MT-006", "Chapa de aço totem 1,2mm", "UN", 5, 2, 310],
-    ["MT-007", "Fonte 24V 150W", "UN", 8, 3, 260],
-    ["MT-008", "Rodízio industrial", "UN", 12, 8, 45],
-    ["MT-009", "Kit parafusos M4", "KIT", 20, 5, 18],
-    ["MT-010", "Cabo HDMI 1,5m", "UN", 7, 3, 32],
-  ];
-  demoMaterials.forEach(([code, name, unit, stock, minStock, cost]) =>
-    saveMaterial({ code, name: name.trim(), unit, stock, minStock, cost, supplier: "Fornecedor Padrão" })
-  );
+  const previousState = clone(state);
+  persistencePaused = true;
 
-  const byCode = (code) => state.materials.find((m) => m.code === code).id;
-  saveStructure({
-    name: "Cabeça",
-    description: "Conjunto de interação do totem: display, câmera, áudio e carcaça.",
-    items: [
-      { materialId: byCode("MT-001"), qty: 1 },
-      { materialId: byCode("MT-003"), qty: 1 },
-      { materialId: byCode("MT-004"), qty: 2 },
-      { materialId: byCode("MT-005"), qty: 1 },
-      { materialId: byCode("MT-009"), qty: 1 },
-    ],
-  });
-  saveStructure({
-    name: "Corpo",
-    description: "Gabinete do totem com eletrônica de processamento.",
-    items: [
-      { materialId: byCode("MT-002"), qty: 1 },
-      { materialId: byCode("MT-006"), qty: 2 },
-      { materialId: byCode("MT-007"), qty: 1 },
-      { materialId: byCode("MT-010"), qty: 1 },
-    ],
-  });
-  saveStructure({
-    name: "Base",
-    description: "Base de sustentação e mobilidade.",
-    items: [
-      { materialId: byCode("MT-006"), qty: 1 },
-      { materialId: byCode("MT-008"), qty: 4 },
-      { materialId: byCode("MT-009"), qty: 1 },
-    ],
-  });
+  try {
+    state = emptyState();
+    const demoMaterials = [
+      ["MT-001", "Display touch 21\" ", "UN", 6, 2, 1250],
+      ["MT-002", "Placa mãe mini-ITX", "UN", 4, 2, 980],
+      ["MT-003", "Câmera 4K USB", "UN", 3, 2, 420],
+      ["MT-004", "Alto-falante 10W", "UN", 10, 4, 85],
+      ["MT-005", "Estrutura ABS cabeça", "UN", 2, 2, 640],
+      ["MT-006", "Chapa de aço totem 1,2mm", "UN", 5, 2, 310],
+      ["MT-007", "Fonte 24V 150W", "UN", 8, 3, 260],
+      ["MT-008", "Rodízio industrial", "UN", 12, 8, 45],
+      ["MT-009", "Kit parafusos M4", "KIT", 20, 5, 18],
+      ["MT-010", "Cabo HDMI 1,5m", "UN", 7, 3, 32],
+    ];
+    demoMaterials.forEach(([code, name, unit, stock, minStock, cost]) =>
+      saveMaterial({ code, name: name.trim(), unit, stock, minStock, cost, supplier: "Fornecedor Padrão" })
+    );
 
-  const structureIds = state.structures.map((s) => s.id);
-  const first = createOrder({ structureIds, quantity: 1, product: "Robô Protus Totem" });
-  produceOrder(first.id);
-  createOrder({ structureIds, quantity: 3, product: "Robô Protus Totem", notes: "Pedido cliente piloto" });
-  persist();
+    const byCode = (code) => state.materials.find((m) => m.code === code).id;
+    saveStructure({
+      name: "Cabeça",
+      description: "Conjunto de interação do totem: display, câmera, áudio e carcaça.",
+      items: [
+        { materialId: byCode("MT-001"), qty: 1 },
+        { materialId: byCode("MT-003"), qty: 1 },
+        { materialId: byCode("MT-004"), qty: 2 },
+        { materialId: byCode("MT-005"), qty: 1 },
+        { materialId: byCode("MT-009"), qty: 1 },
+      ],
+    });
+    saveStructure({
+      name: "Corpo",
+      description: "Gabinete do totem com eletrônica de processamento.",
+      items: [
+        { materialId: byCode("MT-002"), qty: 1 },
+        { materialId: byCode("MT-006"), qty: 2 },
+        { materialId: byCode("MT-007"), qty: 1 },
+        { materialId: byCode("MT-010"), qty: 1 },
+      ],
+    });
+    saveStructure({
+      name: "Base",
+      description: "Base de sustentação e mobilidade.",
+      items: [
+        { materialId: byCode("MT-006"), qty: 1 },
+        { materialId: byCode("MT-008"), qty: 4 },
+        { materialId: byCode("MT-009"), qty: 1 },
+      ],
+    });
+
+    const structureIds = state.structures.map((s) => s.id);
+    const first = createOrder({ structureIds, quantity: 1, product: "Robô Protus Totem" });
+    produceOrder(first.id);
+    createOrder({ structureIds, quantity: 3, product: "Robô Protus Totem", notes: "Pedido cliente piloto" });
+    persistencePaused = false;
+    persist();
+  } catch (error) {
+    persistencePaused = false;
+    state = previousState;
+    throw new Error("Não foi possível carregar os dados de exemplo.", { cause: error });
+  }
 }
 
 export function resetAll() {
