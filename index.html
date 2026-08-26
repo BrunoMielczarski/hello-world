@@ -1,18 +1,71 @@
 <!DOCTYPE html>
-
-<html>
+<html lang="pt-BR">
 <head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-  <title>my-first-website</title>
-  <LINK href="styles.css" rel="stylesheet" type="text/css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Protus | Controle de Estoque e Produção</title>
+  <link rel="icon" href="assets/img/protus-robot.jpeg" />
+  <link rel="stylesheet" href="assets/css/styles.css" />
 </head>
-
 <body>
+  <!-- Login -->
+  <section id="login-screen" class="login-screen">
+    <div class="login-card">
+      <img class="login-logo" src="assets/img/logo-ai-protus.jpeg" alt="AI Protus" />
+      <img class="login-robot" src="assets/img/protus-robot.jpeg" alt="Robô Protus" />
+      <h1>Controle de Estoque &amp; Produção</h1>
+      <p class="login-sub">Robôs de atendimento em formato totem</p>
+      <form id="login-form" autocomplete="off">
+        <label>Usuário
+          <input type="text" id="login-user" placeholder="Protus" required />
+        </label>
+        <label>Senha
+          <input type="password" id="login-pass" placeholder="••••••••" required />
+        </label>
+        <p id="login-error" class="login-error hidden">Usuário ou senha inválidos.</p>
+        <button class="btn btn-primary btn-block" type="submit">Entrar</button>
+      </form>
+      <p class="login-foot">Perfil administrador · acesso total</p>
+    </div>
+  </section>
 
-<img src="https://octodex.github.com/images/daftpunktocat-thomas.gif" id="octocat" alt="octocat-gif" />
+  <!-- App -->
+  <div id="app" class="app hidden">
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="assets/img/logo-ai-protus.jpeg" alt="AI Protus" />
+      </div>
+      <nav id="nav">
+        <button class="nav-item active" data-view="dashboard"><span>Dashboard</span></button>
+        <button class="nav-item" data-view="materials"><span>Cadastro de Materiais</span></button>
+        <button class="nav-item" data-view="structures"><span>Cadastro de Estrutura</span></button>
+        <button class="nav-item" data-view="entries"><span>Entrada de Materiais</span></button>
+        <button class="nav-item" data-view="orders"><span>Ordem de Produção</span></button>
+      </nav>
+      <div class="sidebar-foot">
+        <img class="robot-badge" src="assets/img/protus-robot.jpeg" alt="Protus" />
+        <div>
+          <strong id="session-user">Protus</strong>
+          <small>Administrador</small>
+        </div>
+        <button id="logout" class="btn btn-ghost btn-sm">Sair</button>
+      </div>
+    </aside>
 
-<!-- Change this code here by copy and pasting your template on line 15 -->
-<p>Welcome to your first GitHub Pages website!</p>
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <h2 id="view-title">Dashboard</h2>
+          <p id="view-sub">Visão geral da montagem de robôs Protus</p>
+        </div>
+        <button id="seed-demo" class="btn btn-ghost btn-sm">Carregar dados de exemplo</button>
+      </header>
+      <div id="views"></div>
+    </main>
+  </div>
 
+  <div id="toast" class="toast hidden"></div>
+
+  <script type="module" src="assets/js/app.js"></script>
 </body>
 </html>
