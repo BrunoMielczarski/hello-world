@@ -4,13 +4,6 @@ Sistema web para controlar o estoque de materiais e a demanda de montagem dos ro
 Protus (formato totem). Aplicação 100% estática (HTML + CSS + JavaScript puro), com dados salvos no
 `localStorage` do navegador — pode ser publicada direto no GitHub Pages.
 
-## Acesso
-
-| Usuário | Senha         | Perfil        |
-| ------- | ------------- | ------------- |
-| Protus  | `Protus@4040` | Administrador |
-
-O administrador tem acesso a todas as funções.
 
 ## Telas
 
